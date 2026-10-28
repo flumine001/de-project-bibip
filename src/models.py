@@ -57,3 +57,14 @@ class ModelSaleStats(BaseModel):
     car_model_name: str
     brand: str
     sales_number: int
+
+
+if __name__ == "__main__":
+    car = Car(
+        vin="bla1231",
+        model=3,
+        price=Decimal(400.0),
+        date_start=datetime(2026, 12, 1, 12, 15, 00),
+        status=CarStatus("available"),
+    )
+print(car)
