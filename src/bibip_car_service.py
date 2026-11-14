@@ -247,7 +247,7 @@ class CarService:
                 if not line.strip():
                     continue
                 car = Car.model_validate_json(line.strip())
-                if car.status == CarStatus.available:
+                if car.status == status:
                     list.append(car)
         return list
 
