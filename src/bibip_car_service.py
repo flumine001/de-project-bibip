@@ -97,8 +97,6 @@ class CarService:
     ) -> SortedDict:
         key = getattr(data_string, data_attr)
         with open(file_path, "a+", encoding="utf-8", newline="\n") as f:
-            # Сериализуем объект car с атрибутами в json строку и добавляем достаточно пробелов
-            # Чтобы получить длину всей строки 500 и добавляем символ переноса строки
             f.write(
                 data_string.model_dump_json().ljust(self._line_length) + "\n"
             )
@@ -260,8 +258,34 @@ class CarService:
         raise NotImplementedError
 
     # Задание 6. Удаление продажи
-    def revert_sale(self, sales_number: str) -> Car:
-        raise NotImplementedError
+    def revert_sale(self, sales_number: str) -> Car | None:
+        # raise NotImplementedError
+        with open(self._sales_file, "r+", encoding="utf-8", newline="\n") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                sale = Sale.model_validate_json(line.strip())
+                if sale.sales_number == sales_number:
+                    sale.is_deleted = True
+                    line_number = (f.tell() // (self._line_length + 1)) - 1
+                    f.seek(line_number * (self._line_length + 1))
+                    f.write(
+                        sale.model_dump_json().ljust(self._line_length) + "\n"
+                    )
+                    with open(
+                        self._cars_file, "r+", encoding="utf-8", newline="\n"
+                    ) as f:
+                        line_number = self._car_index[sale.car_vin]
+                        f.seek(line_number * (self._line_length + 1))
+                        car = Car.model_validate_json(f.read(500).strip())
+                        car.status = CarStatus.available
+                        f.seek(line_number * (self._line_length + 1))
+                        f.write(
+                            car.model_dump_json().ljust(self._line_length)
+                            + "\n"
+                        )
+                return car
+        return None
 
     # Задание 7. Самые продаваемые модели
     def top_models_by_sales(self) -> list[ModelSaleStats]:
