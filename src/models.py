@@ -67,4 +67,4 @@ if __name__ == "__main__":
         date_start=datetime(2026, 12, 1, 12, 15, 00),
         status=CarStatus("available"),
     )
-print(car)
+    print(car)
