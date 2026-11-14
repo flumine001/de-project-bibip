@@ -240,7 +240,16 @@ class CarService:
 
     # Задание 3. Доступные к продаже
     def get_cars(self, status: CarStatus) -> list[Car]:
-        raise NotImplementedError
+        # raise NotImplementedError
+        list = []
+        with open(self._cars_file, "r", encoding="utf-8", newline="\n") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                car = Car.model_validate_json(line.strip())
+                if car.status == CarStatus.available:
+                    list.append(car)
+        return list
 
     # Задание 4. Детальная информация
     def get_car_info(self, vin: str) -> CarFullInfo | None:
