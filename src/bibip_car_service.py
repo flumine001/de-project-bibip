@@ -16,6 +16,8 @@ from exceptions import (
     DuplicationVinError,
     ModelNotExistError,
     DuplicationModelError,
+    VinNotExistError,
+    CarAvailabilityError,
 )
 
 Path("data").mkdir(exist_ok=True)
@@ -37,6 +39,8 @@ class CarService:
             root_directory_path  # root_directory_path = PROJECT_ROOT / "data"
         )
         self._line_length = 500
+
+        # Атрибуты для задания 1
         self._cars_file = f"{self.root_directory_path}/cars.txt"
         self._cars_index_file = f"{self.root_directory_path}/cars_index.txt"
         self._models_file = f"{self.root_directory_path}/models.txt"
@@ -46,6 +50,12 @@ class CarService:
 
         self._car_index = self._load_index(self._cars_index_file)
         self._model_index = self._load_index(self._models_index_file)
+
+        # Атрибуты для задания 2
+        self._sales_file = f"{self.root_directory_path}/sales.txt"
+        self._sales_index_file = f"{self.root_directory_path}/sales_index.txt"
+
+        self._sales_index = self._load_index(self._sales_index_file)
 
     # По models.py id моделей машины является первичным ключом, но таблица с моделями является словарем,
     # то есть повторяться наименование модели не может
@@ -97,6 +107,25 @@ class CarService:
         with open(file_path_index, "w", encoding="utf-8") as f:
             json.dump(index_data, f, ensure_ascii=False, indent=2)
         return index_data
+
+        # нет смысла выводить отдельный get, так как может понадобится вывести
+        # несколько объектов в массив, а это означает, что в цикле отдельная функция
+        # будет каждый раз открывать и закрывать файл,
+        # а нам достаточно только один раз выгрузить в память
+        # и преобразовывать строки в объекты оттуда
+
+    # def _get[T: BaseModel](
+    #     self,
+    #     file_path: str,
+    #     index_data: SortedDict,
+    #     cls: type[T],
+    #     key: str | int,
+    # ) -> BaseModel:
+    #     # raise NotImplementedError
+    #     with open(file_path, "r", encoding="utf-8", newline="\n") as f:
+    #         f.seek(index_data[key] * (self._line_length + 1))
+    #         obj = cls.model_validate_json(f.read(500).strip())
+    #     return obj
 
     # Задание 1. Сохранение автомобилей и моделей
     def add_model(self, model: Model) -> Model:
@@ -160,8 +189,54 @@ class CarService:
         return car
 
     # Задание 2. Сохранение продаж.
-    def sell_car(self, sale: Sale) -> Car:
+    def sell_car(
+        self, sale: Sale
+    ) -> Car | None:  # Пока добавим возможность возвращать ничего
         # raise NotImplementedError
+        try:
+            if sale.car_vin in self._sales_index:
+                raise DuplicationVinError
+            if sale.car_vin not in self._car_index:
+                raise VinNotExistError
+        except DuplicationVinError:
+            print(f"Автомобиль с Vin-номером {sale.car_vin} уже был продан")
+            return None
+        except VinNotExistError:
+            print(
+                f"Автомобиль с Vin-номером {sale.car_vin} не существует в бд"
+            )
+            return None
+        else:
+            line_number = self._car_index[sale.car_vin]
+            with open(
+                self._cars_file, "r+", encoding="utf-8", newline="\n"
+            ) as f:
+                f.seek(line_number * (self._line_length + 1))
+                car = Car.model_validate_json(f.read(500).strip())
+                # try:
+                #     if car.status == CarStatus(
+                #         "reserve"
+                #     ) or car.status == CarStatus("delivery"):
+                #         raise CarAvailabilityError
+                # except CarAvailabilityError:
+                #     print(
+                #         f"Статус автомобиля {car.status} не позволяет его продать"
+                #     )
+                #     return car
+                # else:
+
+                car.status = CarStatus.sold
+                f.seek(line_number * (self._line_length + 1))
+                f.write(car.model_dump_json().ljust(self._line_length) + "\n")
+                self._add(
+                    self._sales_file,
+                    self._sales_index_file,
+                    sale,
+                    "car_vin",
+                    self._sales_index,
+                )
+
+        return car
 
     # Задание 3. Доступные к продаже
     def get_cars(self, status: CarStatus) -> list[Car]:
@@ -221,10 +296,17 @@ if __name__ == "__main__":
         date_start=datetime(2026, 12, 1, 12, 15, 00),
         status=CarStatus("sold"),
     )
+    sale1 = Sale(
+        sales_number="1",
+        car_vin="bla1231",
+        sales_date=datetime.today(),
+        cost=Decimal(400.0),
+    )
     service = CarService(f"{PROJECT_ROOT}/data")
     service.add_model(model3)
     service.add_car(car1)
     service.add_car(car2)
+    service.sell_car(sale1)
 
     # with open(MODEL_INDEX_FILE, "w", encoding="utf-8") as f:
     #     json.dump(models_index, f, ensure_ascii=False, indent=2)

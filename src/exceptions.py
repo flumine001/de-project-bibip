@@ -8,6 +8,16 @@ class ModelNotExistError(Exception):
         return "Модель вносимого автомобиля не существует в бд"
 
 
+class VinNotExistError(Exception):
+    def __str__(self):
+        return "Автомобиль с данным VIN номером не существует в бд"
+
+
 class DuplicationModelError(Exception):
     def __str__(self):
         return "Данная модель уже существует в бд"
+
+
+class CarAvailabilityError(Exception):
+    def __str__(self):
+        return "Статус автомобиля не позволяет его продать"
