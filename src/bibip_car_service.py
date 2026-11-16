@@ -366,7 +366,7 @@ class CarService:
         return None
 
     # Как же я долго промучился с этим заданием, так как там требуется
-    # не только обычная сортировка, но сортировка по дате продажи
+    # не только обычная сортировка, но сортировка по цене продажи
     # Задание 7. Самые продаваемые модели
     def top_models_by_sales(self) -> list[ModelSaleStats] | None:
         # raise NotImplementedError
@@ -377,23 +377,23 @@ class CarService:
             self._sales_file, self._sales_index, Sale, key=None
         )
 
-        vin_to_date = {sale.car_vin: sale.sales_date for sale in sales_list}
+        vin_to_price = {sale.car_vin: sale.cost for sale in sales_list}
         stats_by_model: dict[int, dict] = {}
         for car in car_list:
-            sale_date = vin_to_date.get(car.vin)
+            sale_price = vin_to_price.get(car.vin)
 
             if car.model not in stats_by_model:
                 stats_by_model[car.model] = {
                     "count": 1,
-                    "earliest_date": sale_date,
+                    "price": sale_price,
                 }
             else:
                 stats_by_model[car.model]["count"] += 1
-                if sale_date < stats_by_model[car.model]["earliest_date"]:
-                    stats_by_model[car.model]["earliest_date"] = sale_date
+                if sale_price < stats_by_model[car.model]["price"]:
+                    stats_by_model[car.model]["price"] = sale_price
         sorted_models = sorted(
             stats_by_model.items(),
-            key=lambda item: (-item[1]["count"], item[1]["earliest_date"]),
+            key=lambda item: (-item[1]["count"], -item[1]["price"]),
         )
         model_list = self._get(
             self._models_file, self._model_index, Model, key=None
