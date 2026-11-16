@@ -19,6 +19,7 @@ from exceptions import (
     VinNotExistError,
     CarAvailabilityError,
 )
+from collections import Counter
 
 Path("data").mkdir(exist_ok=True)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -52,6 +53,8 @@ class CarService:
         self._model_index = self._load_index(
             self._models_index_file, key_type=int
         )
+
+        self._models = self._load_model()
 
         # Атрибуты для задания 2
         self._sales_file = f"{self.root_directory_path}/sales.txt"
@@ -117,30 +120,44 @@ class CarService:
         # будет каждый раз открывать и закрывать файл,
         # а нам достаточно только один раз выгрузить в память
         # и преобразовывать строки в объекты оттуда
+        # UPDATE: есть смысл делать отдельный get, просто добавим условие
+        # при которой возвращает либо один объект, либо список объектов
+        # UPDATE2: зачем мне mode_list, если проверка на значение key уже разделяет метод
 
     def _get[T: BaseModel](
         self,
         file_path: str,
         index_data: SortedDict,
         cls: type[T],
-        key: str | int,
-    ) -> T | None:
+        key: str | int | None,
+        # mode_list: bool = False,
+    ) -> list[T] | T | None:
         # raise NotImplementedError
-        try:
-            line_number = index_data[key]
-        except KeyError:
-            return None
+        if key is not None:
+            try:
+                line_number = index_data[key]
+            except KeyError:
+                return None
+            # if mode_list is False:
+            with open(file_path, "r", encoding="utf-8", newline="\n") as f:
+                f.seek(line_number * (self._line_length + 1))
+                obj = cls.model_validate_json(f.read(500).strip())
+            return obj
+        result = []
         with open(file_path, "r", encoding="utf-8", newline="\n") as f:
-            f.seek(line_number * (self._line_length + 1))
-            obj = cls.model_validate_json(f.read(500).strip())
-        return obj
+            for line in f:
+                if not line.strip():
+                    continue
+                obj = cls.model_validate_json(line.strip())
+                result.append(obj)
+        return result
 
     # Задание 1. Сохранение автомобилей и моделей
     def add_model(self, model: Model) -> Model:
         # raise NotImplementedError
-        models_index = self._load_model()
+
         try:
-            if model.name in models_index:
+            if model.name in self._models:
                 raise DuplicationModelError
         except DuplicationModelError:
             print(f"Модель с именем {model.name} уже есть в бд")
@@ -220,7 +237,9 @@ class CarService:
                 self._cars_file, "r+", encoding="utf-8", newline="\n"
             ) as f:
                 f.seek(line_number * (self._line_length + 1))
-                car = Car.model_validate_json(f.read(500).strip())
+                car = Car.model_validate_json(
+                    f.read(self._line_length).strip()
+                )
                 # try:
                 #     if car.status == CarStatus(
                 #         "reserve"
@@ -249,15 +268,15 @@ class CarService:
     # Задание 3. Доступные к продаже
     def get_cars(self, status: CarStatus) -> list[Car]:
         # raise NotImplementedError
-        list = []
+        result = []
         with open(self._cars_file, "r", encoding="utf-8", newline="\n") as f:
             for line in f:
                 if not line.strip():
                     continue
                 car = Car.model_validate_json(line.strip())
                 if car.status == status:
-                    list.append(car)
-        return list
+                    result.append(car)
+        return result
 
     # Задание 4. Детальная информация
     def get_car_info(self, vin: str) -> CarFullInfo | None:
@@ -305,7 +324,7 @@ class CarService:
         # with open(self._sales_index, 'r', encoding='utf-8')
 
     # Задание 5. Обновление ключевого поля
-    def update_vin(self, vin: str, new_vin: str) -> Car:
+    def update_vin(self, vin: str, new_vin: str) -> Car | None:
         # raise NotImplementedError
         car = self._get(self._cars_file, self._car_index, Car, vin)
         if car is None:
@@ -346,12 +365,57 @@ class CarService:
             return car
         return None
 
+    # Как же я долго промучился с этим заданием, так как там требуется
+    # не только обычная сортировка, но сортировка по дате продажи
     # Задание 7. Самые продаваемые модели
-    def top_models_by_sales(self) -> list[ModelSaleStats]:
-        raise NotImplementedError
+    def top_models_by_sales(self) -> list[ModelSaleStats] | None:
+        # raise NotImplementedError
+        car_list = self.get_cars(status=CarStatus.sold)
+        if not car_list:
+            return None
+        sales_list = self._get(
+            self._sales_file, self._sales_index, Sale, key=None
+        )
+
+        vin_to_date = {sale.car_vin: sale.sales_date for sale in sales_list}
+        stats_by_model: dict[int, dict] = {}
+        for car in car_list:
+            sale_date = vin_to_date.get(car.vin)
+
+            if car.model not in stats_by_model:
+                stats_by_model[car.model] = {
+                    "count": 1,
+                    "earliest_date": sale_date,
+                }
+            else:
+                stats_by_model[car.model]["count"] += 1
+                if sale_date < stats_by_model[car.model]["earliest_date"]:
+                    stats_by_model[car.model]["earliest_date"] = sale_date
+        sorted_models = sorted(
+            stats_by_model.items(),
+            key=lambda item: (-item[1]["count"], item[1]["earliest_date"]),
+        )
+        model_list = self._get(
+            self._models_file, self._model_index, Model, key=None
+        )
+        models_by_id = {model.id: model for model in model_list}
+        result = []
+        for model_id, data in sorted_models[:3]:
+            model = models_by_id.get(model_id)
+            if model:
+                result.append(
+                    ModelSaleStats(
+                        car_model_name=model.name,
+                        brand=model.brand,
+                        sales_number=data["count"],
+                    )
+                )
+
+        return result
 
 
 if __name__ == "__main__":
+
     # Загружаем индексацию сразу в память, чтобы каждый раз не открывать файл
     # при инициализации методов сохранения
     # и выгрузки информации из бд и сохраняем при завершении программы
@@ -382,7 +446,7 @@ if __name__ == "__main__":
         status=CarStatus("available"),
     )
     car2 = Car(
-        vin="4mo0092921",
+        vin="5mo0092921",
         model=20,
         price=Decimal(1337.0),
         date_start=datetime(2026, 12, 1, 12, 15, 00),
@@ -399,8 +463,7 @@ if __name__ == "__main__":
     service.add_car(car1)
     service.add_car(car2)
     service.sell_car(sale1)
-    service.revert_sale("1")
-    print(service.get_car_info(car1.vin))
+    # print(service.get_cars(CarStatus.sold))
 
-    # with open(MODEL_INDEX_FILE, "w", encoding="utf-8") as f:
-    #     json.dump(models_index, f, ensure_ascii=False, indent=2)
+    # print(service.get_car_info(car1.vin))
+    # print(service.top_models_by_sales())
