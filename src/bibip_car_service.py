@@ -17,21 +17,19 @@ from exceptions import (
     ModelNotExistError,
     DuplicationModelError,
     VinNotExistError,
-    CarAvailabilityError,
 )
-from collections import Counter
 
 Path("data").mkdir(exist_ok=True)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-CAR_FILE = PROJECT_ROOT / "data" / "cars.txt"
-CAR_INDEX_FILE = PROJECT_ROOT / "data" / "cars_index.txt"
+# CAR_FILE = PROJECT_ROOT / "data" / "cars.txt"
+# CAR_INDEX_FILE = PROJECT_ROOT / "data" / "cars_index.txt"
 
-MODEL_FILE = PROJECT_ROOT / "data" / "models.txt"
-MODEL_INDEX_FILE = PROJECT_ROOT / "data" / "models_index.txt"
+# MODEL_FILE = PROJECT_ROOT / "data" / "models.txt"
+# MODEL_INDEX_FILE = PROJECT_ROOT / "data" / "models_index.txt"
 
 
-LINE_LENGTH = 500
+# LINE_LENGTH = 500
 
 
 class CarService:
@@ -123,6 +121,8 @@ class CarService:
         # UPDATE: есть смысл делать отдельный get, просто добавим условие
         # при которой возвращает либо один объект, либо список объектов
         # UPDATE2: зачем мне mode_list, если проверка на значение key уже разделяет метод
+        # UPDATE3: я не знаю, как пофиксить mypy, чтобы он определял объекты и их атрибуты
+        # из _get правильно. Сам код работает
 
     def _get[T: BaseModel](
         self,
