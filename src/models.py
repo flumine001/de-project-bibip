@@ -50,8 +50,8 @@ class CarFullInfo(BaseModel):
     price: Decimal
     date_start: datetime
     status: CarStatus
-    sales_date: datetime | None
-    sales_cost: Decimal | None
+    sales_date: datetime | None = None
+    sales_cost: Decimal | None = None
 
 
 class ModelSaleStats(BaseModel):

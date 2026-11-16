@@ -49,7 +49,9 @@ class CarService:
         )
 
         self._car_index = self._load_index(self._cars_index_file)
-        self._model_index = self._load_index(self._models_index_file)
+        self._model_index = self._load_index(
+            self._models_index_file, key_type=int
+        )
 
         # Атрибуты для задания 2
         self._sales_file = f"{self.root_directory_path}/sales.txt"
@@ -73,13 +75,17 @@ class CarService:
                 model_list.append(model.name)
         return model_list
 
-    def _load_index(self, file_path: str) -> SortedDict:
+    def _load_index(
+        self, file_path: str, key_type: type[str] | type[int] = str
+    ) -> SortedDict:
 
         with open(file_path, "a+", encoding="utf-8", newline="\n") as f:
             try:
                 f.seek(0)
                 raw_data = json.load(f)
-                return SortedDict({str(k): v for k, v in raw_data.items()})
+                return SortedDict(
+                    {key_type(k): v for k, v in raw_data.items()}
+                )
             except json.JSONDecodeError:
                 return SortedDict()
 
@@ -112,18 +118,22 @@ class CarService:
         # а нам достаточно только один раз выгрузить в память
         # и преобразовывать строки в объекты оттуда
 
-    # def _get[T: BaseModel](
-    #     self,
-    #     file_path: str,
-    #     index_data: SortedDict,
-    #     cls: type[T],
-    #     key: str | int,
-    # ) -> BaseModel:
-    #     # raise NotImplementedError
-    #     with open(file_path, "r", encoding="utf-8", newline="\n") as f:
-    #         f.seek(index_data[key] * (self._line_length + 1))
-    #         obj = cls.model_validate_json(f.read(500).strip())
-    #     return obj
+    def _get[T: BaseModel](
+        self,
+        file_path: str,
+        index_data: SortedDict,
+        cls: type[T],
+        key: str | int,
+    ) -> T | None:
+        # raise NotImplementedError
+        try:
+            line_number = index_data[key]
+        except KeyError:
+            return None
+        with open(file_path, "r", encoding="utf-8", newline="\n") as f:
+            f.seek(line_number * (self._line_length + 1))
+            obj = cls.model_validate_json(f.read(500).strip())
+        return obj
 
     # Задание 1. Сохранение автомобилей и моделей
     def add_model(self, model: Model) -> Model:
@@ -251,40 +261,89 @@ class CarService:
 
     # Задание 4. Детальная информация
     def get_car_info(self, vin: str) -> CarFullInfo | None:
-        raise NotImplementedError
+        # raise NotImplementedError
+        # line_number = self._car_index[vin]
+        car = self._get(self._cars_file, self._car_index, Car, vin)
+        if car is None:
+            # print("car = ", car)
+            return None
+        model = self._get(
+            self._models_file, self._model_index, Model, car.model
+        )
+        sale = self._get(self._sales_file, self._sales_index, Sale, vin)
+        if model is None:
+            # print("model = ", model)
+            return None
+        if sale is None:
+            car_full_info = CarFullInfo(
+                vin=vin,
+                car_model_name=model.name,
+                car_model_brand=model.brand,
+                price=car.price,
+                date_start=car.date_start,
+                status=car.status,
+            )
+            return car_full_info
+        car_full_info = CarFullInfo(
+            vin=vin,
+            car_model_name=model.name,
+            car_model_brand=model.brand,
+            price=car.price,
+            date_start=car.date_start,
+            status=car.status,
+            sales_date=sale.sales_date,
+            sales_cost=sale.cost,
+        )
+        return car_full_info
+        # with open(self._cars_file, 'r', encoding='utf-8', newline='\n') as f:
+        #     f.seek(line_number * (self._line_length + 1))
+        #     car = Car.model_validate_json(f.read(500).lstrip())
+        # line_number = self._model_index[car.model]
+        # with open(self._models_file, 'r', encoding='utf-8', newline='\n') as f:
+        #     f.seek(line_number * (self._line_length + 1))
+        #     model = Model.model_validate_json(f.read(500).lstrip())
+        # with open(self._sales_index, 'r', encoding='utf-8')
 
     # Задание 5. Обновление ключевого поля
     def update_vin(self, vin: str, new_vin: str) -> Car:
-        raise NotImplementedError
+        # raise NotImplementedError
+        car = self._get(self._cars_file, self._car_index, Car, vin)
+        if car is None:
+            return None
+        car.vin = new_vin
+        line_number = self._car_index[vin]
+        del self._car_index[vin]
+        self._car_index[new_vin] = line_number
+        with open(self._cars_file, "r+", encoding="utf-8", newline="\n") as f:
+            f.seek(line_number * (self._line_length + 1))
+            f.write(car.model_dump_json().ljust(self._line_length) + "\n")
+        return car
 
     # Задание 6. Удаление продажи
     def revert_sale(self, sales_number: str) -> Car | None:
         # raise NotImplementedError
         with open(self._sales_file, "r+", encoding="utf-8", newline="\n") as f:
-            for line in f:
+            for line_number, line in enumerate(f):
                 if not line.strip():
                     continue
                 sale = Sale.model_validate_json(line.strip())
                 if sale.sales_number == sales_number:
-                    sale.is_deleted = True
-                    line_number = (f.tell() // (self._line_length + 1)) - 1
-                    f.seek(line_number * (self._line_length + 1))
-                    f.write(
-                        sale.model_dump_json().ljust(self._line_length) + "\n"
-                    )
-                    with open(
-                        self._cars_file, "r+", encoding="utf-8", newline="\n"
-                    ) as f:
-                        line_number = self._car_index[sale.car_vin]
-                        f.seek(line_number * (self._line_length + 1))
-                        car = Car.model_validate_json(f.read(500).strip())
-                        car.status = CarStatus.available
-                        f.seek(line_number * (self._line_length + 1))
-                        f.write(
-                            car.model_dump_json().ljust(self._line_length)
-                            + "\n"
-                        )
-                return car
+                    break
+            sale.is_deleted = True
+            # line_number = (f.tell() // (self._line_length + 1)) - 1
+            f.seek(line_number * (self._line_length + 1))
+            f.write(sale.model_dump_json().ljust(self._line_length) + "\n")
+            with open(
+                self._cars_file, "r+", encoding="utf-8", newline="\n"
+            ) as f:
+                line_number = self._car_index[sale.car_vin]
+                f.seek(line_number * (self._line_length + 1))
+                car = Car.model_validate_json(f.read(500).strip())
+                car.status = CarStatus.available
+                f.seek(line_number * (self._line_length + 1))
+                f.write(car.model_dump_json().ljust(self._line_length) + "\n")
+
+            return car
         return None
 
     # Задание 7. Самые продаваемые модели
@@ -340,6 +399,8 @@ if __name__ == "__main__":
     service.add_car(car1)
     service.add_car(car2)
     service.sell_car(sale1)
+    service.revert_sale("1")
+    print(service.get_car_info(car1.vin))
 
     # with open(MODEL_INDEX_FILE, "w", encoding="utf-8") as f:
     #     json.dump(models_index, f, ensure_ascii=False, indent=2)
